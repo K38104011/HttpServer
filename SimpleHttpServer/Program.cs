@@ -12,7 +12,8 @@ namespace SimpleHttpServer
         private static readonly Dictionary<string, string> MimeTypes = new Dictionary<string, string>
         {
             { ".css", "text/css" },
-            { ".html", "text/html" }
+            { ".html", "text/html" },
+            {".js", "application/x-javascript"}
         };
 
         static void Main(string[] args)
