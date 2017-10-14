@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Text;
 using System.Threading.Tasks;
@@ -16,18 +17,43 @@ namespace SimpleHttpServer
             {".js", "application/x-javascript"}
         };
 
+        private static bool isActive = true;
+
         static void Main(string[] args)
         {
-            HttpListener httpListener = new HttpListener();
+            var httpListener = new HttpListener();
             var port = "2211";
             var rootDirectory = Directory.GetCurrentDirectory();
-            httpListener.Prefixes.Add("http://127.0.0.1:" + port + "/");
-            httpListener.Prefixes.Add("http://localhost:" + port + "/");
+            if (args.Any())
+            {
+                if (!string.IsNullOrWhiteSpace(args[0]))
+                {
+                    port = args[0];
+                }
+                if (args.Length > 1 && !string.IsNullOrWhiteSpace(args[1]))
+                {
+                    rootDirectory = args[1];
+                }
+            }
+            httpListener.Prefixes.Add(string.Format("http://127.0.0.1:{0}/", port));
+            httpListener.Prefixes.Add(string.Format("http://localhost:{0}/", port));
             httpListener.Start();
-            Console.WriteLine("Listening...");
+            Console.WriteLine("Listening on port {0}", port);
+            Console.WriteLine("Root: {0}", rootDirectory);
             const int maxRequest = 5;
             var isCreate = true;
-            while (true)
+            Task.Run(async () =>
+            {
+                while (!Console.KeyAvailable)
+                {
+                    if (Console.ReadKey(true).Key == ConsoleKey.Escape)
+                    {
+                        isActive = false;
+                        httpListener.Stop();
+                    }
+                }
+            });
+            while (isActive)
             {
                 if (isCreate)
                 {
