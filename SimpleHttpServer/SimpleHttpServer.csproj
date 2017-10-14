@@ -50,13 +50,12 @@
   </ItemGroup>
   <ItemGroup>
     <Content Include="Content\css\bulma.css" />
+    <Content Include="Images\coca.png" />
     <Content Include="index.html" />
     <Content Include="Scripts\custom\test.js" />
     <Content Include="Scripts\lib\jquery-3.2.1.slim.min.js" />
   </ItemGroup>
-  <ItemGroup>
-    <Folder Include="Images\" />
-  </ItemGroup>
+  <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
     <PreBuildEvent>xcopy "$(ProjectDir)*.html" "$(TargetDir)" /F /R /Y

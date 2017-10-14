@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -10,12 +11,14 @@ namespace SimpleHttpServer
 {
     class Program
     {
-        private static readonly Dictionary<string, string> MimeTypes = new Dictionary<string, string>
+        private static readonly ConcurrentDictionary<string, string> MimeTypes = new ConcurrentDictionary<string, string>(new Dictionary<string, string>
         {
             { ".css", "text/css" },
             { ".html", "text/html" },
-            {".js", "application/x-javascript"}
-        };
+            {".js", "application/x-javascript"},
+            {".png", "image/png"},
+            {".jpg", "image/jpeg"}
+        });
 
         private static bool _isActive = true;
 
@@ -95,9 +98,9 @@ namespace SimpleHttpServer
                 {
                     response.StatusCode = (int)HttpStatusCode.OK;
                     responseBytes = File.ReadAllBytes(pathFileName);
+                    response.ContentType = GetMimeType(fileName);
                 }
                 response.ContentLength64 = responseBytes.Length;
-                response.ContentType = GetMimeType(fileName);
                 using (var stream = response.OutputStream)
                 {
                     await stream.WriteAsync(responseBytes, 0, responseBytes.Length);
@@ -108,7 +111,7 @@ namespace SimpleHttpServer
         private static string GetMimeType(string fileName)
         {
             var extension = Path.GetExtension(fileName);
-            return MimeTypes[extension];
+            return MimeTypes.ContainsKey(extension) ? MimeTypes[extension] : "text/plain";
         }
     }
 }
