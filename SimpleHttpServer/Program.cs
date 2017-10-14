@@ -17,7 +17,7 @@ namespace SimpleHttpServer
             {".js", "application/x-javascript"}
         };
 
-        private static bool isActive = true;
+        private static bool _isActive = true;
 
         static void Main(string[] args)
         {
@@ -42,18 +42,18 @@ namespace SimpleHttpServer
             Console.WriteLine("Root: {0}", rootDirectory);
             const int maxRequest = 5;
             var isCreate = true;
-            Task.Run(async () =>
+            Task.Run(() =>
             {
                 while (!Console.KeyAvailable)
                 {
                     if (Console.ReadKey(true).Key == ConsoleKey.Escape)
                     {
-                        isActive = false;
+                        _isActive = false;
                         httpListener.Stop();
                     }
                 }
             });
-            while (isActive)
+            while (_isActive)
             {
                 if (isCreate)
                 {
@@ -71,7 +71,6 @@ namespace SimpleHttpServer
                 }
             }
         }
-
 
         private static Task CreateProcess(HttpListener httpListener, string rootDirectory)
         {
