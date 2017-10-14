@@ -9,6 +9,12 @@ namespace SimpleHttpServer
 {
     class Program
     {
+        private static readonly Dictionary<string, string> MimeTypes = new Dictionary<string, string>
+        {
+            { ".css", "text/css" },
+            { ".html", "text/html" }
+        };
+
         static void Main(string[] args)
         {
             HttpListener httpListener = new HttpListener();
@@ -44,7 +50,7 @@ namespace SimpleHttpServer
         {
             return Task.Run(async () =>
             {
-                HttpListenerContext httpListenerContext = await httpListener.GetContextAsync();
+                var httpListenerContext = await httpListener.GetContextAsync();
                 var localPath = httpListenerContext.Request.Url.LocalPath;
                 var fileName = localPath.Substring(1);
                 byte[] responseBytes;
@@ -65,12 +71,18 @@ namespace SimpleHttpServer
                     responseBytes = File.ReadAllBytes(pathFileName);
                 }
                 response.ContentLength64 = responseBytes.Length;
-                response.ContentType = "text/html";
+                response.ContentType = GetMimeType(fileName);
                 using (var stream = response.OutputStream)
                 {
                     await stream.WriteAsync(responseBytes, 0, responseBytes.Length);
                 }
             });
+        }
+
+        private static string GetMimeType(string fileName)
+        {
+            var extension = Path.GetExtension(fileName);
+            return MimeTypes[extension];
         }
     }
 }
