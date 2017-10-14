@@ -49,12 +49,8 @@
     <None Include="App.config" />
   </ItemGroup>
   <ItemGroup>
-    <Content Include="Content\css\bulma.css">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Content>
-    <Content Include="index.html">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
+    <Content Include="Content\css\bulma.css" />
+    <Content Include="index.html" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="Images\" />
@@ -62,4 +58,10 @@
     <Folder Include="Scripts\lib\" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <PropertyGroup>
+    <PreBuildEvent>xcopy "$(ProjectDir)*.html" "$(TargetDir)" /F /R /Y
+xcopy "$(ProjectDir)Content" "$(TargetDir)\Content\" /F /S /Y
+xcopy "$(ProjectDir)Images" "$(TargetDir)\Images\" /F /S /Y
+xcopy "$(ProjectDir)Scripts" "$(TargetDir)\Scripts\" /F /S /Y</PreBuildEvent>
+  </PropertyGroup>
 </Project>
