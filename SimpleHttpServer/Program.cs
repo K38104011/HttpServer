@@ -2,6 +2,7 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Net;
 using System.Text;
@@ -101,9 +102,41 @@ namespace SimpleHttpServer
                     response.ContentType = GetMimeType(fileName);
                 }
                 response.ContentLength64 = responseBytes.Length;
-                using (var stream = response.OutputStream)
+                var acceptEncodings = httpListenerContext.Request.Headers["Accept-Encoding"];
+                if (acceptEncodings.Contains("gzip") && !".png,.jpg,.map".Split(',').Contains(Path.GetExtension(fileName)))
                 {
-                    await stream.WriteAsync(responseBytes, 0, responseBytes.Length);
+                    try
+                    {
+                        response.Headers.Add("Content-Encoding", "gzip");
+                        using (var inputStream = new MemoryStream(responseBytes))
+                        {
+                            using (var stream = response.OutputStream)
+                            {
+                                using (var outputStream = new MemoryStream())
+                                {
+                                    using (var compressStream = new GZipStream(outputStream, CompressionMode.Compress, true))
+                                    {
+                                        await inputStream.CopyToAsync(compressStream);
+                                    }
+                                    var temp = outputStream.ToArray();
+                                    response.ContentLength64 = temp.Length;
+                                    await stream.WriteAsync(temp, 0, temp.Length);
+                                }
+                            }
+                        }
+                    }
+                    catch (Exception e)
+                    {
+                        Console.WriteLine(e);
+                        throw;
+                    }
+                }
+                else
+                {
+                    using (var stream = response.OutputStream)
+                    {
+                        await stream.WriteAsync(responseBytes, 0, responseBytes.Length);
+                    }
                 }
             });
         }
@@ -113,5 +146,6 @@ namespace SimpleHttpServer
             var extension = Path.GetExtension(fileName);
             return MimeTypes.ContainsKey(extension) ? MimeTypes[extension] : "text/plain";
         }
+
     }
 }
