@@ -5,8 +5,16 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Net;
-using System.Text;
+using System.Net.Http;
+using System.Reflection;
+using System.Security;
+using System.Security.Permissions;
+using System.Security.Policy;
 using System.Threading.Tasks;
+using RazorEngine;
+using RazorEngine.Templating;
+using SimpleHttpServer.Implementation.Controller;
+using Encoding = System.Text.Encoding;
 
 namespace SimpleHttpServer
 {
@@ -22,9 +30,30 @@ namespace SimpleHttpServer
         });
 
         private static bool _isActive = true;
-
-        static void Main(string[] args)
+        //Todo write cache, upload file
+        static int Main(string[] args)
         {
+            if (AppDomain.CurrentDomain.IsDefaultAppDomain())
+            {
+                // RazorEngine cannot clean up from the default appdomain...
+                Console.WriteLine("Switching to secound AppDomain, for RazorEngine...");
+                AppDomainSetup adSetup = new AppDomainSetup
+                {
+                    ApplicationBase = AppDomain.CurrentDomain.SetupInformation.ApplicationBase
+                };
+                var current = AppDomain.CurrentDomain;
+                // You only need to add strongnames when your appdomain is not a full trust environment.
+                var strongNames = new StrongName[0];
+
+                var domain = AppDomain.CreateDomain(
+                    "MyMainDomain", null,
+                    current.SetupInformation, new PermissionSet(PermissionState.Unrestricted),
+                    strongNames);
+                var exitCode = domain.ExecuteAssembly(Assembly.GetExecutingAssembly().Location);
+                // RazorEngine will cleanup. 
+                AppDomain.Unload(domain);
+                return exitCode;
+            }
             var httpListener = new HttpListener();
             var port = "2211";
             var rootDirectory = Directory.GetCurrentDirectory();
@@ -74,6 +103,7 @@ namespace SimpleHttpServer
                     });
                 }
             }
+            return 0;
         }
 
         private static Task CreateProcess(HttpListener httpListener, string rootDirectory)
@@ -83,60 +113,142 @@ namespace SimpleHttpServer
                 var httpListenerContext = await httpListener.GetContextAsync();
                 var localPath = httpListenerContext.Request.Url.LocalPath;
                 var fileName = localPath.Substring(1);
+                var request = httpListenerContext.Request;
                 byte[] responseBytes;
-                if (string.IsNullOrEmpty(fileName))
+                var methodHttp = httpListenerContext.Request.HttpMethod;
+                if (methodHttp == System.Net.WebRequestMethods.Http.Get)
                 {
-                    fileName = "index.html";
-                }
-                var pathFileName = Path.Combine(rootDirectory, fileName);
-                var response = httpListenerContext.Response;
-                if (!File.Exists(pathFileName))
-                {
-                    response.StatusCode = (int)HttpStatusCode.NotFound;
-                    responseBytes = Encoding.UTF8.GetBytes("Not found");
-                }
-                else
-                {
-                    response.StatusCode = (int)HttpStatusCode.OK;
-                    responseBytes = File.ReadAllBytes(pathFileName);
-                    response.ContentType = GetMimeType(fileName);
-                }
-                response.ContentLength64 = responseBytes.Length;
-                var acceptEncodings = httpListenerContext.Request.Headers["Accept-Encoding"];
-                if (acceptEncodings.Contains("gzip") && !".png,.jpg,.map".Split(',').Contains(Path.GetExtension(fileName)))
-                {
-                    try
+                    if (string.IsNullOrEmpty(fileName))
                     {
-                        response.Headers.Add("Content-Encoding", "gzip");
-                        using (var inputStream = new MemoryStream(responseBytes))
+                        fileName = "index.html";
+                    }
+                    var pathFileName = Path.Combine(rootDirectory, fileName);
+                    var response = httpListenerContext.Response;
+                    response.ContentType = GetMimeType(fileName);
+                    if (!File.Exists(pathFileName) && string.IsNullOrWhiteSpace(response.ContentType))
+                    {
+                        response.StatusCode = (int)HttpStatusCode.NotFound;
+                        responseBytes = Encoding.UTF8.GetBytes("Not found");
+
+                        var tokenString = request.RawUrl;
+                        var tokens = tokenString.Split('/');
+
+                        if (tokens.Length >= 2 && (Path.GetExtension(pathFileName) == ".cshtml" ||
+                            string.IsNullOrWhiteSpace(Path.GetExtension(pathFileName)))
+                                && Directory.Exists(Path.Combine(Directory.GetCurrentDirectory(), "Views")))
                         {
-                            using (var stream = response.OutputStream)
+                            var controller = tokens[0];
+                            var action = tokens[1];
+
+                            //if (!string.IsNullOrWhiteSpace(tokens[1]) && !string.IsNullOrWhiteSpace(tokens[2]))
+                            //{
+                            //    var concreteController = new ConcreteController();
+                            //    var createTextMethod = typeof(Controller).GetMethod("CreateTextFile", BindingFlags.NonPublic | BindingFlags.Instance);
+                            //    createTextMethod.Invoke(concreteController, new object[] {tokens[1], tokens[2]});
+                            //}
+
+                            //var folderViews = Path.Combine(Directory.GetCurrentDirectory(), "Views");
+                            //var filesInViewsFoler = new DirectoryInfo(folderViews).GetFiles();
+                            //var cshtmlFile = string.Empty;
+                            //foreach (var file in filesInViewsFoler)
+                            //{
+                            //    if (File.Exists(file.FullName))
+                            //    {
+                            //        cshtmlFile = file.FullName;
+                            //        break;
+                            //    }
+                            //}
+                            //if (string.IsNullOrWhiteSpace(cshtmlFile))
+                            //{
+                            //    var folderControl = Path.Combine(folderViews, controller);
+                            //    var controlSubDirectories = new DirectoryInfo(folderControl).GetDirectories();
+                            //    foreach (var controlSubDirectory in controlSubDirectories)
+                            //    {
+                            //        var cshtmlFilePath = Path.Combine(controlSubDirectory.FullName,
+                            //            Path.GetFileNameWithoutExtension(action) + ".cshtml");
+                            //        if (File.Exists(cshtmlFilePath))
+                            //        {
+                            //            cshtmlFile = cshtmlFilePath;
+                            //            break;
+                            //        }
+                            //    }
+                            //}
+                            var cshtmlFile = Path.Combine(rootDirectory, "Views\\DB\\Init.cshtml");
+                            if (!string.IsNullOrWhiteSpace(cshtmlFile))
                             {
-                                using (var outputStream = new MemoryStream())
+                                response.StatusCode = (int)HttpStatusCode.OK;
+                                var template = File.ReadAllText(cshtmlFile);
+                                var result = Engine.Razor.RunCompile(template, Guid.NewGuid().ToString(), null,
+                                    new { Name = "Giang" });
+                                responseBytes = Encoding.UTF8.GetBytes(result);
+                            }
+                        }
+
+                    }
+                    else
+                    {
+                        responseBytes = File.ReadAllBytes(pathFileName);
+                        response.StatusCode = (int)HttpStatusCode.OK;
+                        response.ContentType = GetMimeType(fileName);
+                    }
+                    response.ContentLength64 = responseBytes.Length;
+                    var acceptEncodings = httpListenerContext.Request.Headers["Accept-Encoding"];
+                    if (acceptEncodings.Contains("gzip") && !".png,.jpg,.map".Split(',').Contains(Path.GetExtension(fileName)))
+                    {
+                        try
+                        {
+                            response.Headers.Add("Content-Encoding", "gzip");
+                            using (var inputStream = new MemoryStream(responseBytes))
+                            {
+                                using (var stream = response.OutputStream)
                                 {
-                                    using (var compressStream = new GZipStream(outputStream, CompressionMode.Compress, true))
+                                    using (var outputStream = new MemoryStream())
                                     {
-                                        await inputStream.CopyToAsync(compressStream);
+                                        using (var compressStream = new GZipStream(outputStream, CompressionMode.Compress, true))
+                                        {
+                                            await inputStream.CopyToAsync(compressStream);
+                                        }
+                                        var temp = outputStream.ToArray();
+                                        response.ContentLength64 = temp.Length;
+                                        await stream.WriteAsync(temp, 0, temp.Length);
                                     }
-                                    var temp = outputStream.ToArray();
-                                    response.ContentLength64 = temp.Length;
-                                    await stream.WriteAsync(temp, 0, temp.Length);
                                 }
                             }
                         }
+                        catch (Exception e)
+                        {
+                            Console.WriteLine(e);
+                            throw;
+                        }
                     }
-                    catch (Exception e)
+                    else
                     {
-                        Console.WriteLine(e);
-                        throw;
+                        using (var stream = response.OutputStream)
+                        {
+                            await stream.WriteAsync(responseBytes, 0, responseBytes.Length);
+                        }
                     }
                 }
-                else
+                else if (methodHttp == WebRequestMethods.Http.Post)
                 {
-                    using (var stream = response.OutputStream)
+                    if (!request.HasEntityBody)
                     {
-                        await stream.WriteAsync(responseBytes, 0, responseBytes.Length);
+                        return;
                     }
+                    var body = await new StreamReader(request.InputStream).ReadToEndAsync();
+                    var fields = body.Split('&');
+                    if (!fields.Any())
+                    {
+                        return;
+                    }
+                    var tokens = request.RawUrl.Split('\\');
+                    var controllerName = tokens[1];
+                    var actionName = tokens[2];
+                    if (!tokens.Any() || tokens.Length != 3)
+                    {
+                        return;
+                    }
+                    InitializeShemaDatabase(controllerName, actionName);
                 }
             });
         }
@@ -144,7 +256,20 @@ namespace SimpleHttpServer
         private static string GetMimeType(string fileName)
         {
             var extension = Path.GetExtension(fileName);
-            return MimeTypes.ContainsKey(extension) ? MimeTypes[extension] : "text/plain";
+            return MimeTypes.ContainsKey(extension) ? MimeTypes[extension] : string.Empty;
+        }
+
+        private static void InitializeShemaDatabase(string controllerName, string actionName)
+        {
+            if (controllerName == "DB" && actionName == "Init")
+            {
+                var dbFolder = Path.Combine(Directory.GetCurrentDirectory(), controllerName);
+                if (!Directory.Exists(dbFolder))
+                {
+                    new DirectoryInfo(dbFolder).Create();
+                }
+                
+            }
         }
 
     }
